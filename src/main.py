@@ -1,29 +1,39 @@
-import google.generativeai as genai
-from flask import Flask, request, jsonify
+from appwrite.client import Client
+from appwrite.services.users import Users
+from appwrite.exception import AppwriteException
 import os
 
-app = Flask(__name__)
+# This Appwrite function will be executed every time your function is triggered
+def main(context):
+    # You can use the Appwrite SDK to interact with other services
+    # For this example, we're using the Users service
+    client = (
+        Client()
+        .set_endpoint(os.environ["APPWRITE_FUNCTION_API_ENDPOINT"])
+        .set_project(os.environ["APPWRITE_FUNCTION_PROJECT_ID"])
+        .set_key(context.req.headers["x-appwrite-key"])
+    )
+    users = Users(client)
 
-# Imposta la tua chiave API Gemini da variabile ambiente
-genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
-
-# Inizializza il modello
-model = genai.GenerativeModel("gemini-1.5-flash")
-
-@app.route("/", methods=["POST"])
-def chat():
     try:
-        data = request.get_json()
-        user_message = data.get("msg", "")
+        response = users.list()
+        # Log messages and errors to the Appwrite Console
+        # These logs won't be seen by your end users
+        context.log("Total users: " + str(response["total"]))
+    except AppwriteException as err:
+        context.error("Could not list users: " + repr(err))
 
-        if not user_message:
-            return jsonify({"reply": "Messaggio vuoto."}), 400
+    # The req object contains the request data
+    if context.req.path == "/ping":
+        # Use res object to respond with text(), json(), or binary()
+        # Don't forget to return a response!
+        return context.res.text("Pong")
 
-        response = model.generate_content(user_message)
-        reply_text = response.text.strip()
-
-        return jsonify({"reply": reply_text})
-    
-    except Exception as e:
-        return jsonify({"reply": f"Errore interno: {str(e)}"}), 500
-
+    return context.res.json(
+        {
+            "motto": "Build like a team of hundreds_",
+            "learn": "https://appwrite.io/docs",
+            "connect": "https://appwrite.io/discord",
+            "getInspired": "https://builtwith.appwrite.io",
+        }
+    )
