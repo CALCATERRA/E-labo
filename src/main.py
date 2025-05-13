@@ -16,9 +16,19 @@ def main(context):
     # ✅ Verifica connessione Appwrite
     context.log("✅ Connessione Appwrite OK.")
 
+    # ✅ Gestione preflight CORS
+    if context.req.method == "OPTIONS":
+        return context.res.empty().with_headers({
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "POST, OPTIONS",
+            "Access-Control-Allow-Headers": "Content-Type, x-appwrite-key"
+        })
+
     # 👉 Ping di test
     if context.req.path == "/ping":
-        return context.res.text("Pong")
+        return context.res.text("Pong").with_headers({
+            "Access-Control-Allow-Origin": "*"
+        })
 
     # 👉 POST con messaggio utente
     if context.req.method == "POST":
@@ -47,15 +57,20 @@ def main(context):
             # 🚀 Genera risposta
             response = model.generate_content(full_prompt)
 
-            # ✅ Ritorna la risposta al client
-            return context.res.json({"reply": response.text})
+            # ✅ Ritorna la risposta al client con header CORS
+            return context.res.json({"reply": response.text}).with_headers({
+                "Access-Control-Allow-Origin": "*"
+            })
 
         except Exception as e:
             context.error(f"❌ Errore durante la generazione: {e}")
-            context.res.status = 500
-            return context.res.json({"error": str(e)})
+            return context.res.json({"error": str(e)}).with_status(500).with_headers({
+                "Access-Control-Allow-Origin": "*"
+            })
 
     # ℹ️ Messaggio di default
     return context.res.json({
         "info": "Usa POST con {'msg': '...'} per parlare con Gemini."
+    }).with_headers({
+        "Access-Control-Allow-Origin": "*"
     })
