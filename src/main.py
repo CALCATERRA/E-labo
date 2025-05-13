@@ -29,7 +29,7 @@ def main(context):
     if context.req.method == "POST":
         try:
             # 🔄 Correzione per il parsing del body
-            data = json.loads(context.req.body)
+            data = context.req.body  # Non serve più il json.loads()
             user_msg = data.get("msg", "").strip()
 
             # Leggi il prompt personalizzato da prompt.json
@@ -56,7 +56,7 @@ def main(context):
 
         except Exception as e:
             context.error(f"Errore durante la generazione: {e}")
-            context.res.status = 500  # 🔄 Correzione dello status
+            context.res.status = 500
             return context.res.json({"error": str(e)})
 
     return context.res.json({
