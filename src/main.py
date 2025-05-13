@@ -55,16 +55,24 @@ def main(context):
             except Exception as e:
                 context.log(f"⚠️ Nessun prompt.json trovato o errore: {e}")
 
-            # Componi il prompt finale
-            full_prompt = f"{intro_prompt}\n\nUtente: {user_msg}"
-
             # Configura Gemini
             gemini_api_key = os.environ.get("GEMINI_API_KEY")
             genai.configure(api_key=gemini_api_key)
             model = genai.GenerativeModel("gemini-2.0-flash-thinking-exp-01-21")
 
-            # Genera risposta
-            response = model.generate_content(full_prompt)
+            # Genera risposta con system_instruction
+            response = model.generate_content(
+                contents=[
+                    {"role": "user", "parts": [user_msg]}
+                ],
+                generation_config={
+                    "temperature": 0.7,
+                    "top_p": 1,
+                    "top_k": 40,
+                    "max_output_tokens": 512,
+                },
+                system_instruction=intro_prompt
+            )
 
             # Ritorna risposta
             return {
