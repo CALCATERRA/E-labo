@@ -4,6 +4,14 @@ import os
 import json
 import google.generativeai as genai
 
+# Headers CORS da aggiungere a tutte le risposte
+cors_headers = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers": "Content-Type, x-appwrite-key",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Credentials": "true"
+}
+
 def main(context):
     # Inizializza Appwrite Client
     client = (
@@ -15,13 +23,6 @@ def main(context):
 
     context.log("✅ Connessione Appwrite OK.")
 
-    # Headers CORS comuni
-    cors_headers = {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type, x-appwrite-key"
-    }
-
     # Gestione preflight OPTIONS
     if context.req.method == "OPTIONS":
         return {
@@ -30,7 +31,7 @@ def main(context):
             "body": ""
         }
 
-    # Ping
+    # Test semplice
     if context.req.path == "/ping":
         return {
             "statusCode": 200,
@@ -38,13 +39,14 @@ def main(context):
             "body": "Pong"
         }
 
-    # POST con messaggio utente
+    # Gestione POST
     if context.req.method == "POST":
         try:
-            data = json.loads(context.req.body.decode("utf-8"))
+            # Leggi messaggio utente dal body
+            data = context.req.body if isinstance(context.req.body, dict) else json.loads(context.req.body)
             user_msg = data.get("msg", "").strip()
 
-            # Prompt personalizzato
+            # Leggi prompt base da prompt.json
             intro_prompt = ""
             try:
                 with open("prompt.json", "r") as f:
@@ -53,14 +55,18 @@ def main(context):
             except Exception as e:
                 context.log(f"⚠️ Nessun prompt.json trovato o errore: {e}")
 
+            # Componi il prompt finale
             full_prompt = f"{intro_prompt}\n\nUtente: {user_msg}"
 
-            # Gemini API
+            # Configura Gemini
             gemini_api_key = os.environ.get("GEMINI_API_KEY")
             genai.configure(api_key=gemini_api_key)
             model = genai.GenerativeModel("gemini-2.0-flash-thinking-exp-01-21")
+
+            # Genera risposta
             response = model.generate_content(full_prompt)
 
+            # Ritorna risposta
             return {
                 "statusCode": 200,
                 "headers": cors_headers,
@@ -75,7 +81,7 @@ def main(context):
                 "body": json.dumps({ "error": str(e) })
             }
 
-    # Messaggio generico
+    # Risposta di default per altri metodi
     return {
         "statusCode": 200,
         "headers": cors_headers,
