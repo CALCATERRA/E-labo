@@ -13,31 +13,38 @@ def main(context):
         .set_key(context.req.headers["x-appwrite-key"])
     )
 
-    # ✅ Verifica connessione Appwrite
     context.log("✅ Connessione Appwrite OK.")
 
-    # ✅ Gestione preflight CORS
+    # Headers CORS comuni
+    cors_headers = {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, x-appwrite-key"
+    }
+
+    # Gestione preflight OPTIONS
     if context.req.method == "OPTIONS":
-        return context.res.empty().with_headers({
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Methods": "POST, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type, x-appwrite-key"
-        })
+        return {
+            "statusCode": 204,
+            "headers": cors_headers,
+            "body": ""
+        }
 
-    # 👉 Ping di test
+    # Ping
     if context.req.path == "/ping":
-        return context.res.text("Pong").with_headers({
-            "Access-Control-Allow-Origin": "*"
-        })
+        return {
+            "statusCode": 200,
+            "headers": cors_headers,
+            "body": "Pong"
+        }
 
-    # 👉 POST con messaggio utente
+    # POST con messaggio utente
     if context.req.method == "POST":
         try:
-            # 🔄 Correzione per il parsing del body
             data = json.loads(context.req.body.decode("utf-8"))
             user_msg = data.get("msg", "").strip()
 
-            # 🔍 Leggi il prompt personalizzato da prompt.json
+            # Prompt personalizzato
             intro_prompt = ""
             try:
                 with open("prompt.json", "r") as f:
@@ -46,31 +53,33 @@ def main(context):
             except Exception as e:
                 context.log(f"⚠️ Nessun prompt.json trovato o errore: {e}")
 
-            # ✍️ Componi il prompt finale
             full_prompt = f"{intro_prompt}\n\nUtente: {user_msg}"
 
-            # ✅ Configura Gemini
+            # Gemini API
             gemini_api_key = os.environ.get("GEMINI_API_KEY")
             genai.configure(api_key=gemini_api_key)
             model = genai.GenerativeModel("gemini-2.0-flash-thinking-exp-01-21")
-
-            # 🚀 Genera risposta
             response = model.generate_content(full_prompt)
 
-            # ✅ Ritorna la risposta al client con header CORS
-            return context.res.json({"reply": response.text}).with_headers({
-                "Access-Control-Allow-Origin": "*"
-            })
+            return {
+                "statusCode": 200,
+                "headers": cors_headers,
+                "body": json.dumps({ "reply": response.text })
+            }
 
         except Exception as e:
             context.error(f"❌ Errore durante la generazione: {e}")
-            return context.res.json({"error": str(e)}).with_status(500).with_headers({
-                "Access-Control-Allow-Origin": "*"
-            })
+            return {
+                "statusCode": 500,
+                "headers": cors_headers,
+                "body": json.dumps({ "error": str(e) })
+            }
 
-    # ℹ️ Messaggio di default
-    return context.res.json({
-        "info": "Usa POST con {'msg': '...'} per parlare con Gemini."
-    }).with_headers({
-        "Access-Control-Allow-Origin": "*"
-    })
+    # Messaggio generico
+    return {
+        "statusCode": 200,
+        "headers": cors_headers,
+        "body": json.dumps({
+            "info": "Usa POST con {'msg': '...'} per parlare con Gemini."
+        })
+    }
