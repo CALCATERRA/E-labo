@@ -42,11 +42,12 @@ def main(context):
     # Gestione POST
     if context.req.method == "POST":
         try:
-            # Leggi messaggio utente dal body
+            # Leggi messaggio utente e storia della chat dal body
             data = context.req.body if isinstance(context.req.body, dict) else json.loads(context.req.body)
             user_msg = data.get("msg", "").strip()
+            history = data.get("history", [])  # deve essere una lista di dizionari [{role: 'user'|'model', text: '...'}]
 
-            # Leggi prompt base da prompt.json
+            # Carica il prompt di sistema da prompt.json
             intro_prompt = ""
             try:
                 with open("prompt.json", "r") as f:
@@ -55,30 +56,38 @@ def main(context):
             except Exception as e:
                 context.log(f"⚠️ Nessun prompt.json trovato o errore: {e}")
 
+            # Prepara la conversazione (max ultimi 10 messaggi)
+            trimmed_history = history[-10:]  # massimo 10 scambi
+            conversation = []
+            for h in trimmed_history:
+                role = "user" if h["role"] == "user" else "model"
+                conversation.append({"role": role, "parts": [h["text"]]})
+
+            # Aggiungi l'ultimo messaggio dell'utente
+            conversation.append({"role": "user", "parts": [user_msg]})
+
             # Configura Gemini
             gemini_api_key = os.environ.get("GEMINI_API_KEY")
             genai.configure(api_key=gemini_api_key)
             model = genai.GenerativeModel("gemini-2.0-flash-thinking-exp-01-21")
 
-            # Genera risposta con system_instruction
+            # Chiamata a Gemini con system prompt
             response = model.generate_content(
                 contents=[
-                    {"role": "user", "parts": [user_msg]}
-                ],
+                    {"role": "system", "parts": [intro_prompt]}
+                ] + conversation,
                 generation_config={
                     "temperature": 0.7,
                     "top_p": 1,
                     "top_k": 40,
                     "max_output_tokens": 512,
-                },
-                system_instruction=intro_prompt
+                }
             )
 
-            # Ritorna risposta
             return {
                 "statusCode": 200,
                 "headers": cors_headers,
-                "body": json.dumps({ "reply": response.text })
+                "body": json.dumps({"reply": response.text})
             }
 
         except Exception as e:
@@ -86,7 +95,7 @@ def main(context):
             return {
                 "statusCode": 500,
                 "headers": cors_headers,
-                "body": json.dumps({ "error": str(e) })
+                "body": json.dumps({"error": str(e)})
             }
 
     # Risposta di default per altri metodi
@@ -94,6 +103,6 @@ def main(context):
         "statusCode": 200,
         "headers": cors_headers,
         "body": json.dumps({
-            "info": "Usa POST con {'msg': '...'} per parlare con Gemini."
+            "info": "Usa POST con {'msg': '...'} e 'history': [...] per parlare con Gemini."
         })
     }
