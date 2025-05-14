@@ -45,26 +45,19 @@ def main(context):
             history = data.get("history", [])
 
             # Carica prompt.json
-            try:
-                with open(os.path.join(os.path.dirname(__file__), "prompt.json"), "r") as f:
-                    prompt_data = json.load(f)
-                    system_instruction = prompt_data.get("system_instruction", "")
-            except Exception as e:
-                context.log(f"⚠️ Errore caricamento prompt.json: {e}")
-                system_instruction = ""
+            with open(os.path.join(os.path.dirname(__file__), "prompt.json"), "r") as f:
+                prompt_data = json.load(f)
 
-            # Prepara contesto per Gemini
-            prompt_parts = []
-            if system_instruction:
-                prompt_parts.append({"text": system_instruction + "\n"})
+            system_instruction = prompt_data.get("system_instruction", "")
 
-            # Aggiungi gli ultimi 10 scambi dalla history
-            for h in history[-10:]:
-                role_prefix = "Utente" if h["role"] == "user" else "Simone"
-                prompt_parts.append({"text": f"{role_prefix}: {h['text']}\n"})
+            # Costruzione del prompt
+            sorted_messages = history[-10:]  # Ultimi 10 messaggi
+            prompt_parts = [{"text": system_instruction + "\n"}]
 
-            # Aggiungi l'ultimo messaggio utente
-            prompt_parts.append({"text": f"Utente: {user_msg}\nSimone:"})
+            for m in sorted_messages:
+                prompt_parts.append({"text": f"Utente: {m.get('message', '')}\n"})
+
+            prompt_parts.append({"text": f"Utente: {user_msg}\n"})
 
             # Configura Gemini
             gemini_api_key = os.environ.get("GEMINI_API_KEY")
@@ -76,18 +69,16 @@ def main(context):
                 prompt_parts,
                 generation_config={
                     "temperature": 0.7,
-                    "top_p": 1,
-                    "top_k": 40,
-                    "max_output_tokens": 512,
+                    "max_output_tokens": 65536,
+                    "top_k": 64,
+                    "top_p": 0.95
                 }
             )
-
-            reply_text = response.text.strip() if hasattr(response, "text") else "🤖 Nessuna risposta."
 
             return {
                 "statusCode": 200,
                 "headers": cors_headers,
-                "body": json.dumps({"reply": reply_text})
+                "body": json.dumps({"reply": response.text})
             }
 
         except Exception as e:
