@@ -44,27 +44,27 @@ def main(context):
             user_msg = data.get("msg", "").strip()
             history = data.get("history", [])
 
-            # Carica prompt
+            # Carica prompt.json
             try:
                 with open(os.path.join(os.path.dirname(__file__), "prompt.json"), "r") as f:
                     prompt_data = json.load(f)
-                    intro_prompt = prompt_data if isinstance(prompt_data, str) else prompt_data.get("prompt", "")
+                    system_instruction = prompt_data.get("system_instruction", "")
             except Exception as e:
                 context.log(f"⚠️ Errore caricamento prompt.json: {e}")
-                intro_prompt = ""
+                system_instruction = ""
 
-            # Prepara conversazione
-            trimmed_history = history[-10:]
-            conversation = []
+            # Prepara contesto per Gemini
+            prompt_parts = []
+            if system_instruction:
+                prompt_parts.append({"text": system_instruction + "\n"})
 
-            if intro_prompt:
-                conversation.append({"role": "user", "parts": [intro_prompt]})
+            # Aggiungi gli ultimi 10 scambi dalla history
+            for h in history[-10:]:
+                role_prefix = "Utente" if h["role"] == "user" else "Simone"
+                prompt_parts.append({"text": f"{role_prefix}: {h['text']}\n"})
 
-            for h in trimmed_history:
-                if h["role"] in ["user", "model"]:
-                    conversation.append({"role": h["role"], "parts": [h["text"]]})
-
-            conversation.append({"role": "user", "parts": [user_msg]})
+            # Aggiungi l'ultimo messaggio utente
+            prompt_parts.append({"text": f"Utente: {user_msg}\nSimone:"})
 
             # Configura Gemini
             gemini_api_key = os.environ.get("GEMINI_API_KEY")
@@ -73,7 +73,7 @@ def main(context):
 
             # Chiamata a Gemini
             response = model.generate_content(
-                contents=conversation,
+                prompt_parts,
                 generation_config={
                     "temperature": 0.7,
                     "top_p": 1,
@@ -82,10 +82,12 @@ def main(context):
                 }
             )
 
+            reply_text = response.text.strip() if hasattr(response, "text") else "🤖 Nessuna risposta."
+
             return {
                 "statusCode": 200,
                 "headers": cors_headers,
-                "body": json.dumps({"reply": response.text})
+                "body": json.dumps({"reply": reply_text})
             }
 
         except Exception as e:
