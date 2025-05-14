@@ -4,7 +4,6 @@ import os
 import json
 import google.generativeai as genai
 
-# Headers CORS da aggiungere a tutte le risposte
 cors_headers = {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Headers": "Content-Type, x-appwrite-key",
@@ -23,7 +22,7 @@ def main(context):
 
     context.log("✅ Connessione Appwrite OK.")
 
-    # Gestione preflight OPTIONS
+    # Preflight CORS
     if context.req.method == "OPTIONS":
         return {
             "statusCode": 204,
@@ -31,7 +30,6 @@ def main(context):
             "body": ""
         }
 
-    # Test semplice
     if context.req.path == "/ping":
         return {
             "statusCode": 200,
@@ -39,41 +37,38 @@ def main(context):
             "body": "Pong"
         }
 
-    # Gestione POST
     if context.req.method == "POST":
         try:
-            # Leggi messaggio utente e storia della chat dal body
+            # Body parsing
             data = context.req.body if isinstance(context.req.body, dict) else json.loads(context.req.body)
             user_msg = data.get("msg", "").strip()
-            history = data.get("history", [])  # deve essere una lista di dizionari [{role: 'user'|'model', text: '...'}]
+            history = data.get("history", [])
 
-            # Carica il prompt da prompt.json
-        with open(os.path.join(os.path.dirname(__file__), "prompt.json"), "r") as f:
-            intro_prompt = json.load(f)
+            # Carica prompt.json
+            intro_prompt = ""
+            try:
+                with open(os.path.join(os.path.dirname(__file__), "prompt.json"), "r") as f:
+                    prompt_data = json.load(f)
+                    intro_prompt = prompt_data.get("prompt", "")
             except Exception as e:
-                context.log(f"⚠️ Nessun prompt.json trovato o errore: {e}")
+                context.log(f"⚠️ prompt.json mancante o errore: {e}")
 
-            # Prepara la conversazione (max ultimi 10 messaggi)
-            trimmed_history = history[-10:]  # massimo 10 scambi
+            # Prepara la conversazione
+            trimmed_history = history[-10:]
             conversation = []
             for h in trimmed_history:
-                if h["role"] not in ["user", "model"]:
-                    continue
-                conversation.append({"role": h["role"], "parts": [h["text"]]})
+                if h["role"] in ["user", "model"]:
+                    conversation.append({"role": h["role"], "parts": [h["text"]]})
 
-            # Aggiungi il prompt di introduzione come messaggio utente iniziale se esiste
             if intro_prompt:
                 conversation.insert(0, {"role": "user", "parts": [intro_prompt]})
 
-            # Aggiungi l'ultimo messaggio dell'utente
             conversation.append({"role": "user", "parts": [user_msg]})
 
-            # Configura Gemini
-            gemini_api_key = os.environ.get("GEMINI_API_KEY")
-            genai.configure(api_key=gemini_api_key)
+            # Gemini
+            genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
             model = genai.GenerativeModel("gemini-2.0-flash-thinking-exp-01-21")
 
-            # Chiamata a Gemini
             response = model.generate_content(
                 contents=conversation,
                 generation_config={
@@ -98,7 +93,6 @@ def main(context):
                 "body": json.dumps({"error": str(e)})
             }
 
-    # Risposta di default per altri metodi
     return {
         "statusCode": 200,
         "headers": cors_headers,
