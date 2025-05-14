@@ -47,12 +47,9 @@ def main(context):
             user_msg = data.get("msg", "").strip()
             history = data.get("history", [])  # deve essere una lista di dizionari [{role: 'user'|'model', text: '...'}]
 
-            # Carica il prompt di sistema da prompt.json
-            intro_prompt = ""
-            try:
-                with open("prompt.json", "r") as f:
-                    prompt_data = json.load(f)
-                    intro_prompt = prompt_data.get("intro", "")
+            # Carica il prompt da prompt.json
+        with open(os.path.join(os.path.dirname(__file__), "prompt.json"), "r") as f:
+            intro_prompt = json.load(f)
             except Exception as e:
                 context.log(f"⚠️ Nessun prompt.json trovato o errore: {e}")
 
