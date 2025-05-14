@@ -60,8 +60,13 @@ def main(context):
             trimmed_history = history[-10:]  # massimo 10 scambi
             conversation = []
             for h in trimmed_history:
-                role = "user" if h["role"] == "user" else "model"
-                conversation.append({"role": role, "parts": [h["text"]]})
+                if h["role"] not in ["user", "model"]:
+                    continue
+                conversation.append({"role": h["role"], "parts": [h["text"]]})
+
+            # Aggiungi il prompt di introduzione come messaggio utente iniziale se esiste
+            if intro_prompt:
+                conversation.insert(0, {"role": "user", "parts": [intro_prompt]})
 
             # Aggiungi l'ultimo messaggio dell'utente
             conversation.append({"role": "user", "parts": [user_msg]})
@@ -71,11 +76,9 @@ def main(context):
             genai.configure(api_key=gemini_api_key)
             model = genai.GenerativeModel("gemini-2.0-flash-thinking-exp-01-21")
 
-            # Chiamata a Gemini con system prompt
+            # Chiamata a Gemini
             response = model.generate_content(
-                contents=[
-                    {"role": "system", "parts": [intro_prompt]}
-                ] + conversation,
+                contents=conversation,
                 generation_config={
                     "temperature": 0.7,
                     "top_p": 1,
