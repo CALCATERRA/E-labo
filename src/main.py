@@ -23,7 +23,6 @@ def main(context):
 
     context.log("✅ Connessione Appwrite OK.")
 
-    # Gestione preflight OPTIONS
     if context.req.method == "OPTIONS":
         return {
             "statusCode": 204,
@@ -31,7 +30,6 @@ def main(context):
             "body": ""
         }
 
-    # Test semplice
     if context.req.path == "/ping":
         return {
             "statusCode": 200,
@@ -39,15 +37,14 @@ def main(context):
             "body": "Pong"
         }
 
-    # Gestione POST
     if context.req.method == "POST":
         try:
-            # Leggi messaggio utente e storia della chat
+            # Estrai dati
             data = context.req.body if isinstance(context.req.body, dict) else json.loads(context.req.body)
             user_msg = data.get("msg", "").strip()
             history = data.get("history", [])
 
-            # Carica il prompt da prompt.json
+            # Carica prompt
             try:
                 with open(os.path.join(os.path.dirname(__file__), "prompt.json"), "r") as f:
                     prompt_data = json.load(f)
@@ -56,26 +53,34 @@ def main(context):
                 context.log(f"⚠️ Errore caricamento prompt.json: {e}")
                 intro_prompt = ""
 
-            # Prepara cronologia per Gemini (max 10 messaggi)
+            # Prepara conversazione
             trimmed_history = history[-10:]
             conversation = []
+
+            if intro_prompt:
+                conversation.append({"role": "user", "parts": [intro_prompt]})
+
             for h in trimmed_history:
-                if h["role"] not in ["user", "model"]:
-                    continue
-                conversation.append({"role": h["role"], "parts": [h["text"]]})
+                if h["role"] in ["user", "model"]:
+                    conversation.append({"role": h["role"], "parts": [h["text"]]})
+
+            conversation.append({"role": "user", "parts": [user_msg]})
 
             # Configura Gemini
             gemini_api_key = os.environ.get("GEMINI_API_KEY")
             genai.configure(api_key=gemini_api_key)
             model = genai.GenerativeModel("gemini-2.0-flash-thinking-exp-01-21")
 
-            chat = model.start_chat(
-                history=conversation,
-                system_instruction=intro_prompt
+            # Chiamata a Gemini
+            response = model.generate_content(
+                contents=conversation,
+                generation_config={
+                    "temperature": 0.7,
+                    "top_p": 1,
+                    "top_k": 40,
+                    "max_output_tokens": 512,
+                }
             )
-
-            # Invia messaggio
-            response = chat.send_message(user_msg)
 
             return {
                 "statusCode": 200,
@@ -91,7 +96,6 @@ def main(context):
                 "body": json.dumps({"error": str(e)})
             }
 
-    # Risposta predefinita
     return {
         "statusCode": 200,
         "headers": cors_headers,
