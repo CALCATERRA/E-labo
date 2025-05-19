@@ -3,6 +3,9 @@ from appwrite.exception import AppwriteException
 import os
 import json
 import google.generativeai as genai
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+import datetime
 
 # Headers CORS
 cors_headers = {
@@ -51,13 +54,37 @@ def main(context):
             system_instruction = prompt_data.get("system_instruction", "")
 
             # Costruzione del prompt
-            sorted_messages = history[-10:]  # Ultimi 10 messaggi
+            sorted_messages = history[-10:]
             prompt_parts = [{"text": system_instruction + "\n"}]
 
             for m in sorted_messages:
                 prompt_parts.append({"text": f"Utente: {m.get('message', '')}\n"})
 
             prompt_parts.append({"text": f"Utente: {user_msg}\n"})
+
+            # === Google Calendar Integration ===
+            credentials_info = json.loads(os.environ.get("credentials"))
+            credentials = service_account.Credentials.from_service_account_info(credentials_info)
+            service = build('calendar', 'v3', credentials=credentials)
+
+            now = datetime.datetime.utcnow().isoformat() + 'Z'
+            events_result = service.events().list(
+                calendarId='primary',
+                timeMin=now,
+                maxResults=10,
+                singleEvents=True,
+                orderBy='startTime'
+            ).execute()
+
+            events = events_result.get('items', [])
+
+            if not events:
+                calendar_summary = "Non ci sono eventi nel calendario."
+            else:
+                calendar_summary = "Ecco i prossimi eventi:\n"
+                for event in events:
+                    start = event['start'].get('dateTime', event['start'].get('date'))
+                    calendar_summary += f"- {event.get('summary', 'Senza titolo')} | Inizio: {start}\n"
 
             # Configura Gemini
             gemini_api_key = os.environ.get("GEMINI_API_KEY")
@@ -75,10 +102,14 @@ def main(context):
                 }
             )
 
+            # Risposta finale con calendario incluso
             return {
                 "statusCode": 200,
                 "headers": cors_headers,
-                "body": json.dumps({"reply": response.text})
+                "body": json.dumps({
+                    "reply": response.text,
+                    "calendar": calendar_summary
+                })
             }
 
         except Exception as e:
@@ -96,3 +127,4 @@ def main(context):
             "info": "Usa POST con {'msg': '...'} e 'history': [...] per parlare con Gemini."
         })
     }
+
