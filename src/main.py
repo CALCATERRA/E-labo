@@ -21,7 +21,7 @@ def main(context):
             Client()
             .set_endpoint(os.environ["APPWRITE_FUNCTION_API_ENDPOINT"])
             .set_project(os.environ["APPWRITE_FUNCTION_PROJECT_ID"])
-            .set_key(os.environ["APPWRITE_API_KEY"])
+            .set_key(os.environ["APPWRITE_FUNCTION_API_KEY"])
         )
 
         context.log("✅ Connessione Appwrite OK.")
