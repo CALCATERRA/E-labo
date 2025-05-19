@@ -3,11 +3,8 @@ from appwrite.exception import AppwriteException
 import os
 import json
 import google.generativeai as genai
-from google.oauth2 import service_account
-from googleapiclient.discovery import build
-import datetime
 
-# Headers CORS
+# Headers CORS da aggiungere a tutte le risposte
 cors_headers = {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Headers": "Content-Type, x-appwrite-key",
@@ -26,6 +23,7 @@ def main(context):
 
     context.log("✅ Connessione Appwrite OK.")
 
+    # Gestione preflight OPTIONS
     if context.req.method == "OPTIONS":
         return {
             "statusCode": 204,
@@ -33,6 +31,7 @@ def main(context):
             "body": ""
         }
 
+    # Test semplice
     if context.req.path == "/ping":
         return {
             "statusCode": 200,
@@ -40,51 +39,37 @@ def main(context):
             "body": "Pong"
         }
 
+    # Gestione POST
     if context.req.method == "POST":
         try:
-            # Estrai dati
+            # Leggi messaggio utente e storia della chat dal body
             data = context.req.body if isinstance(context.req.body, dict) else json.loads(context.req.body)
             user_msg = data.get("msg", "").strip()
-            history = data.get("history", [])
+            history = data.get("history", [])  # deve essere una lista di dizionari [{role: 'user'|'model', text: '...'}]
 
-            # Carica prompt.json
-            with open(os.path.join(os.path.dirname(__file__), "prompt.json"), "r") as f:
-                prompt_data = json.load(f)
+            # Carica il prompt di sistema da prompt.json
+            intro_prompt = ""
+            try:
+                with open("prompt.json", "r") as f:
+                    prompt_data = json.load(f)
+                    intro_prompt = prompt_data.get("intro", "")
+            except Exception as e:
+                context.log(f"⚠️ Nessun prompt.json trovato o errore: {e}")
 
-            system_instruction = prompt_data.get("system_instruction", "")
+            # Prepara la conversazione (max ultimi 10 messaggi)
+            trimmed_history = history[-10:]  # massimo 10 scambi
+            conversation = []
+            for h in trimmed_history:
+                if h["role"] not in ["user", "model"]:
+                    continue
+                conversation.append({"role": h["role"], "parts": [h["text"]]})
 
-            # Costruzione del prompt
-            sorted_messages = history[-10:]
-            prompt_parts = [{"text": system_instruction + "\n"}]
+            # Aggiungi il prompt di introduzione come messaggio utente iniziale se esiste
+            if intro_prompt:
+                conversation.insert(0, {"role": "user", "parts": [intro_prompt]})
 
-            for m in sorted_messages:
-                prompt_parts.append({"text": f"Utente: {m.get('message', '')}\n"})
-
-            prompt_parts.append({"text": f"Utente: {user_msg}\n"})
-
-            # === Google Calendar Integration ===
-            credentials_info = json.loads(os.environ.get("credentials"))
-            credentials = service_account.Credentials.from_service_account_info(credentials_info)
-            service = build('calendar', 'v3', credentials=credentials)
-
-            now = datetime.datetime.utcnow().isoformat() + 'Z'
-            events_result = service.events().list(
-                calendarId='primary',
-                timeMin=now,
-                maxResults=10,
-                singleEvents=True,
-                orderBy='startTime'
-            ).execute()
-
-            events = events_result.get('items', [])
-
-            if not events:
-                calendar_summary = "Non ci sono eventi nel calendario."
-            else:
-                calendar_summary = "Ecco i prossimi eventi:\n"
-                for event in events:
-                    start = event['start'].get('dateTime', event['start'].get('date'))
-                    calendar_summary += f"- {event.get('summary', 'Senza titolo')} | Inizio: {start}\n"
+            # Aggiungi l'ultimo messaggio dell'utente
+            conversation.append({"role": "user", "parts": [user_msg]})
 
             # Configura Gemini
             gemini_api_key = os.environ.get("GEMINI_API_KEY")
@@ -93,23 +78,19 @@ def main(context):
 
             # Chiamata a Gemini
             response = model.generate_content(
-                prompt_parts,
+                contents=conversation,
                 generation_config={
                     "temperature": 0.7,
-                    "max_output_tokens": 65536,
-                    "top_k": 64,
-                    "top_p": 0.95
+                    "top_p": 1,
+                    "top_k": 40,
+                    "max_output_tokens": 512,
                 }
             )
 
-            # Risposta finale con calendario incluso
             return {
                 "statusCode": 200,
                 "headers": cors_headers,
-                "body": json.dumps({
-                    "reply": response.text,
-                    "calendar": calendar_summary
-                })
+                "body": json.dumps({"reply": response.text})
             }
 
         except Exception as e:
@@ -120,6 +101,7 @@ def main(context):
                 "body": json.dumps({"error": str(e)})
             }
 
+    # Risposta di default per altri metodi
     return {
         "statusCode": 200,
         "headers": cors_headers,
