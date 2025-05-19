@@ -63,14 +63,13 @@ def main(context):
             prompt_parts.append({"text": f"Utente: {user_msg}\n"})
 
             # === Google Calendar Integration ===
-            context.log("🔄 Recupero eventi dal Calendario Google...")
             credentials_info = json.loads(os.environ.get("credentials"))
             credentials = service_account.Credentials.from_service_account_info(credentials_info)
             service = build('calendar', 'v3', credentials=credentials)
 
-            now = datetime.datetime.utcnow().isoformat() + 'Z'  # 'Z' indica UTC
+            now = datetime.datetime.utcnow().isoformat() + 'Z'
             events_result = service.events().list(
-                calendarId='primary',     # Puoi cambiare con l'ID del calendario specifico se ne hai più di uno
+                calendarId='primary',
                 timeMin=now,
                 maxResults=10,
                 singleEvents=True,
@@ -79,17 +78,13 @@ def main(context):
 
             events = events_result.get('items', [])
 
-            # Creazione del riepilogo del calendario
             if not events:
-                calendar_summary = "Non ci sono eventi in programma nel calendario.\n"
+                calendar_summary = "Non ci sono eventi nel calendario."
             else:
-                calendar_summary = "Questi sono i prossimi eventi in programma:\n"
+                calendar_summary = "Ecco i prossimi eventi:\n"
                 for event in events:
                     start = event['start'].get('dateTime', event['start'].get('date'))
                     calendar_summary += f"- {event.get('summary', 'Senza titolo')} | Inizio: {start}\n"
-
-            # Aggiungi il riepilogo del calendario al prompt di Gemini
-            prompt_parts.append({"text": f"Informazioni calendario:\n{calendar_summary}\n"})
 
             # Configura Gemini
             gemini_api_key = os.environ.get("GEMINI_API_KEY")
@@ -107,7 +102,7 @@ def main(context):
                 }
             )
 
-            # Risposta finale
+            # Risposta finale con calendario incluso
             return {
                 "statusCode": 200,
                 "headers": cors_headers,
